@@ -9,6 +9,15 @@ import socket
 import env_file
 
 sensor = dht.DHT22(Pin(22))
+led = Pin(13, Pin.OUT)
+
+unique_id = ""
+
+
+def log(text):
+    with open('log.txt', 'a') as file:
+        # Write the string to the file
+        file.write(text + "\n")
 
 
 def send_data_through_broadcast(message):
@@ -31,12 +40,23 @@ def ConnectWiFi():
     password = env_file.password
     # Initialize the WiFi interface
     wlan = network.WLAN(network.STA_IF)
+    led.on()
+    sleep(0.5)
+    led.off()
 
-    psph = str_to_int(ubinascii.hexlify(wlan.config("mac")).decode())
-    print(password)
-    print(psph)
-    password = dec(password, psph)
-    print(password)
+    log("i am here")
+
+    mac_adrr = ubinascii.hexlify(wlan.config("mac")).decode()
+    s = machine.unique_id()
+
+    unique_id = ""
+    for b in s:
+        unique_id += str(int(hex(b)[2:], 16))
+
+    log("chip_id: " + unique_id)
+    log(password)
+    password = dec(password, int(unique_id))
+    log(password)
 
     # Activate the WiFi interface
     wlan.active(True)
@@ -45,16 +65,10 @@ def ConnectWiFi():
     # Wait until the connection is established
     while wlan.isconnected() == False:
         print('Waiting for connection...')
-        sleep(1)
+        log('Waiting for connection...')
     # Print the IP address and other network details
     print(wlan.ifconfig())
-
-
-def str_to_int(str):
-    int = 0
-    for i, l in enumerate(str):
-        int += i * ord(l)
-    return int
+    return unique_id
 
 
 def dec(encrypted_text, shift):
@@ -74,7 +88,7 @@ def dec(encrypted_text, shift):
     return decmsg
 
 
-ConnectWiFi()
+unique_id = ConnectWiFi()
 
 while True:
     try:
@@ -83,7 +97,13 @@ while True:
         hum = sensor.humidity()
         print('Temperature: %3.1f C' % temp)
         print('Humidity: %3.1f %%' % hum)
-        message = {"temp": temp, "hum": hum, "name": env_file.name}
+        message = {
+            "temp": temp,
+            "hum": hum,
+            "name": env_file.name,
+            "unique_id": str(unique_id),
+        }
+        log(json.dumps(message))
         send_data_through_broadcast(json.dumps(message))
         sleep(1 * 60)
     except OSError as e:

@@ -18,16 +18,8 @@ def main(text, shift):
     return encrypted_message
 
 
-def str_to_int(str):
-    int = 0
-    for i, l in enumerate(str):
-        int += i * ord(l)
-    return int
 
 
 if __name__ == "__main__":
-    passphrase = sys.argv[2]
-    shift = str_to_int(passphrase)
-    if shift < 0:
-        shift = shift * (-1)
+    shift = int(sys.argv[2])
     print(main(sys.argv[1], shift))
