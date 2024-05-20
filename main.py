@@ -1,5 +1,5 @@
-from machine import Pin
-from time import sleep
+from machine import Pin, deepsleep, lightsleep
+import time
 import ubinascii
 import sys
 import dht
@@ -41,7 +41,7 @@ def ConnectWiFi():
     # Initialize the WiFi interface
     wlan = network.WLAN(network.STA_IF)
     led.on()
-    sleep(0.5)
+    time.sleep(0.5)
     led.off()
 
     log("i am here")
@@ -54,9 +54,7 @@ def ConnectWiFi():
         unique_id += str(int(hex(b)[2:], 16))
 
     log("chip_id: " + unique_id)
-    log(password)
     password = dec(password, int(unique_id))
-    log(password)
 
     # Activate the WiFi interface
     wlan.active(True)
@@ -66,7 +64,11 @@ def ConnectWiFi():
     while wlan.isconnected() == False:
         print('Waiting for connection...')
         log('Waiting for connection...')
+        time.sleep(1)
     # Print the IP address and other network details
+    led.on()
+    time.sleep(0.5)
+    led.off()
     print(wlan.ifconfig())
     return unique_id
 
@@ -88,23 +90,38 @@ def dec(encrypted_text, shift):
     return decmsg
 
 
-unique_id = ConnectWiFi()
+# def get_time_stamp():
+#     try:
+#         ntptime.settime()
+#         current_time = time.localtime()
+#         return "{:02d}/{:02d}/{} {:02d}:{:02d}".format(current_time[2],
+#                                                        current_time[1],
+#                                                        current_time[0],
+#                                                        current_time[3],
+#                                                        current_time[4])
+#     except:
+#         return "TIME_ERROR"
+
+
+def main():
+    unique_id = ConnectWiFi()
+
+    sensor.measure()
+    temp = sensor.temperature()
+    hum = sensor.humidity()
+    print('Temperature: %3.1f C' % temp)
+    print('Humidity: %3.1f %%' % hum)
+
+    message = {
+        "temp": temp,
+        "hum": hum,
+        "name": env_file.name,
+        "unique_id": str(unique_id)
+    }
+    log(json.dumps(message))
+    send_data_through_broadcast(json.dumps(message))
+    lightsleep(1000 * 60 * 60)
+
 
 while True:
-    try:
-        sensor.measure()
-        temp = sensor.temperature()
-        hum = sensor.humidity()
-        print('Temperature: %3.1f C' % temp)
-        print('Humidity: %3.1f %%' % hum)
-        message = {
-            "temp": temp,
-            "hum": hum,
-            "name": env_file.name,
-            "unique_id": str(unique_id),
-        }
-        log(json.dumps(message))
-        send_data_through_broadcast(json.dumps(message))
-        sleep(1 * 60)
-    except OSError as e:
-        print('Failed to read sensor.')
+    main()
