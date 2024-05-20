@@ -1,4 +1,5 @@
 .env
 env_file.py
 ceaser_encrypt.py
+log.txt
 .DS_Store
