@@ -1,3 +1,4 @@
 .env
 env_file.py
 ceaser_encrypt.py
+.DS_Store
