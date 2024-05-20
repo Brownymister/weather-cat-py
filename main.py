@@ -44,8 +44,6 @@ def ConnectWiFi():
     time.sleep(0.5)
     led.off()
 
-    log("i am here")
-
     mac_adrr = ubinascii.hexlify(wlan.config("mac")).decode()
     s = machine.unique_id()
 
@@ -60,16 +58,26 @@ def ConnectWiFi():
     wlan.active(True)
     # Attempt to connect to the WiFi network
     wlan.connect(ssid, password)
-    # Wait until the connection is established
-    while wlan.isconnected() == False:
+    # wlan.ifconfig(
+    #     (env_file.ip, env_file.subnet, env_file.gateway, env_file.dns))
+
+    i = 0
+    while wlan.isconnected() == False and i < 30:
         print('Waiting for connection...')
         log('Waiting for connection...')
         time.sleep(1)
+        i = i + 1
+    if wlan.isconnected() == False:
+        log('Connection failed: going into lightsleep;')
+        return "0"
+
+    log('Connection success;')
     # Print the IP address and other network details
     led.on()
     time.sleep(0.5)
     led.off()
     print(wlan.ifconfig())
+    log(str(wlan.ifconfig()))
     return unique_id
 
 
@@ -90,25 +98,16 @@ def dec(encrypted_text, shift):
     return decmsg
 
 
-# def get_time_stamp():
-#     try:
-#         ntptime.settime()
-#         current_time = time.localtime()
-#         return "{:02d}/{:02d}/{} {:02d}:{:02d}".format(current_time[2],
-#                                                        current_time[1],
-#                                                        current_time[0],
-#                                                        current_time[3],
-#                                                        current_time[4])
-#     except:
-#         return "TIME_ERROR"
-
-
 def main():
     unique_id = ConnectWiFi()
+    if unique_id == "0":
+        log("uid == '0'")
+        return
 
     sensor.measure()
     temp = sensor.temperature()
     hum = sensor.humidity()
+    log('messured')
     print('Temperature: %3.1f C' % temp)
     print('Humidity: %3.1f %%' % hum)
 
@@ -120,8 +119,8 @@ def main():
     }
     log(json.dumps(message))
     send_data_through_broadcast(json.dumps(message))
-    lightsleep(1000 * 60 * 60)
 
 
 while True:
     main()
+    lightsleep(1000 * 60 * 60)
