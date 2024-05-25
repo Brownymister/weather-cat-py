@@ -62,14 +62,16 @@ def ConnectWiFi():
     #     (env_file.ip, env_file.subnet, env_file.gateway, env_file.dns))
 
     i = 0
+    start_time = time.time()  # Get the current time in seconds since the epoch
     while wlan.isconnected() == False and i < 30:
         print('Waiting for connection...')
         log('Waiting for connection...')
-        time.sleep(1)
+        # time.sleep(1)
         i = i + 1
-    if wlan.isconnected() == False:
-        log('Connection failed: going into lightsleep;')
-        return "0"
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    log("time_elapsed: " + str(elapsed_time))
 
     log('Connection success;')
     # Print the IP address and other network details
@@ -100,12 +102,15 @@ def dec(encrypted_text, shift):
 
 def main():
     unique_id = ConnectWiFi()
-    if unique_id == "0":
-        log("uid == '0'")
-        return
+    # if unique_id == "0":
+    #     log("uid == '0'")
+    #     return
 
+    log("start messure")
     sensor.measure()
+    log("messuring ...")
     temp = sensor.temperature()
+    log("messuring ...")
     hum = sensor.humidity()
     log('messured')
     print('Temperature: %3.1f C' % temp)
@@ -121,6 +126,8 @@ def main():
     send_data_through_broadcast(json.dumps(message))
 
 
+log("start up")
+
 while True:
     main()
-    lightsleep(1000 * 60 * 60)
+    lightsleep(1000 * 60 * 5)
