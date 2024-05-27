@@ -40,9 +40,9 @@ def ConnectWiFi():
     password = env_file.password
     # Initialize the WiFi interface
     wlan = network.WLAN(network.STA_IF)
-    led.on()
-    time.sleep(0.5)
-    led.off()
+    # led.on()
+    # time.sleep(0.5)
+    # led.off()
 
     mac_adrr = ubinascii.hexlify(wlan.config("mac")).decode()
     s = machine.unique_id()
@@ -58,26 +58,29 @@ def ConnectWiFi():
     wlan.active(True)
     # Attempt to connect to the WiFi network
     wlan.connect(ssid, password)
-    # wlan.ifconfig(
-    #     (env_file.ip, env_file.subnet, env_file.gateway, env_file.dns))
+    time.sleep(1)
 
     i = 0
-    start_time = time.time()  # Get the current time in seconds since the epoch
+    start_time = time.time()
     while wlan.isconnected() == False and i < 30:
+        # Get the current time in seconds since the epoch
         print('Waiting for connection...')
         log('Waiting for connection...')
-        # time.sleep(1)
+        time.sleep(1)
         i = i + 1
 
     end_time = time.time()
     elapsed_time = end_time - start_time
     log("time_elapsed: " + str(elapsed_time))
 
+    if wlan.isconnected() == False:
+        return "0"
+
     log('Connection success;')
     # Print the IP address and other network details
-    led.on()
-    time.sleep(0.5)
-    led.off()
+    # led.on()
+    # time.sleep(0.5)
+    # led.off()
     print(wlan.ifconfig())
     log(str(wlan.ifconfig()))
     return unique_id
@@ -102,9 +105,9 @@ def dec(encrypted_text, shift):
 
 def main():
     unique_id = ConnectWiFi()
-    # if unique_id == "0":
-    #     log("uid == '0'")
-    #     return
+    if unique_id == "0":
+        log("uid == '0'")
+        return
 
     log("start messure")
     sensor.measure()
@@ -130,4 +133,4 @@ log("start up")
 
 while True:
     main()
-    lightsleep(1000 * 60 * 5)
+    lightsleep(1000 * 60 * 60)
