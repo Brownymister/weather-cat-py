@@ -1,24 +1,29 @@
-import socket
-import datetime
-from datetime import datetime
+import bluetooth
 
-# Create a UDP socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+# Scan for devices
+print("Scanning...")
+devices = bluetooth.discover_devices(lookup_names=True)
 
-# Bind the socket to a port
-server_address = ('', 12345)
-sock.bind(server_address)
+for addr, name in devices:
+    print(f"Found {name} ({addr})")
 
-print(f"Listening on port {12345}")
+# Attempt to connect to the first found device
+target_name = "mpy-uart"
+target_address = None
 
-while True:
-    # Listen for incoming broadcasts
-    data, address = sock.recvfrom(4096)
+for device_addr, device_name in devices:
+    if target_name == device_name:
+        target_address = device_addr
+        break
 
-    now = datetime.now()
+if target_address is not None:
+    print(f"Connecting to {target_name} at address {target_address}")
+    port = 1  # RFCOMM channel
+    sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+    sock.connect((target_address, port))
+    print("Connected!")
+else:
+    print("Could not find target Bluetooth device named \"{}\"".format(target_name))
 
-    # Format the datetime object to show only up to the second
-    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+sock.close()
 
-    # Print the received data and the sender's address
-    print(f"{timestamp} Received {data} from {address}")

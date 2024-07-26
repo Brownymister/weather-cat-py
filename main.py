@@ -1,136 +1,123 @@
-from machine import Pin, deepsleep, lightsleep
+# source: https://github.com/raspberrypi/pico-micropython-examples/blob/master/bluetooth/picow_ble_temp_sensor.py
+
+import bluetooth
+import random
+import struct
 import time
+import machine
 import ubinascii
-import sys
 import dht
-import network
-import json
-import socket
+from blauzahn_advert import advertising_payload
+from micropython import const
+from machine import Pin
 import env_file
 
+_IRQ_CENTRAL_CONNECT = const(1)
+_IRQ_CENTRAL_DISCONNECT = const(2)
+_IRQ_GATTS_INDICATE_DONE = const(20)
+
+_FLAG_READ = const(0x0002)
+_FLAG_NOTIFY = const(0x0010)
+_FLAG_INDICATE = const(0x0020)
+
+# org.bluetooth.service.environmental_sensing
+_ENV_SENSE_UUID = bluetooth.UUID(0x181A)
+# org.bluetooth.characteristic.temperature
+_TEMP_CHAR = (
+    bluetooth.UUID(0x2A6E),
+    _FLAG_READ | _FLAG_NOTIFY | _FLAG_INDICATE,
+)
+_ENV_SENSE_SERVICE = (
+    _ENV_SENSE_UUID,
+    (_TEMP_CHAR, ),
+)
+
+# org.bluetooth.characteristic.gap.appearance.xml
+_ADV_APPEARANCE_GENERIC_THERMOMETER = const(768)
+
 sensor = dht.DHT22(Pin(22))
-led = Pin(13, Pin.OUT)
-
-unique_id = ""
 
 
-def log(text):
-    with open('log.txt', 'a') as file:
-        # Write the string to the file
-        file.write(text + "\n")
+class BLETemperature:
+
+    def __init__(self, ble, name="WeatherCat"):
+        self._sensor_temp = machine.ADC(4)
+        self._ble = ble
+        self._ble.active(True)
+        self._ble.irq(self._irq)
+        ((self._handle, ), ) = self._ble.gatts_register_services(
+            (_ENV_SENSE_SERVICE, ))
+        self._connections = set()
+        self.name = env_file.name
+        if len(name) == 0:
+            name = 'Pico %s' % ubinascii.hexlify(
+                self._ble.config('mac')[1], ':').decode().upper()
+        print('Sensor name %s' % name)
+        self._payload = advertising_payload(name=name,
+                                            services=[_ENV_SENSE_UUID])
+        self._advertise()
+
+    def _irq(self, event, data):
+        # Track connections so we can send notifications.
+        if event == _IRQ_CENTRAL_CONNECT:
+            conn_handle, _, _ = data
+            self._connections.add(conn_handle)
+        elif event == _IRQ_CENTRAL_DISCONNECT:
+            conn_handle, _, _ = data
+            self._connections.remove(conn_handle)
+            # Start advertising again to allow a new connection.
+            self._advertise()
+        elif event == _IRQ_GATTS_INDICATE_DONE:
+            conn_handle, value_handle, status = data
+
+    def update_temperature(self, notify=False, indicate=False):
+        # Write the local value, ready for a central to read.
+        temp_deg_c, hum = self.get_temp()
+        print("write temp %.2f degc" % temp_deg_c)
+        # self._ble.gatts_write(self._handle,
+        #                       struct.pack("<h", int(temp_deg_c * 100)))
+
+        self._ble.gatts_write(
+            self._handle, '{"t":' + str(temp_deg_c) + ',"h":' + str(hum) +
+            ', "name":"' + self.name + '"}')
+        if notify or indicate:
+            for conn_handle in self._connections:
+                if notify:
+                    # Notify connected centrals.
+                    self._ble.gatts_notify(conn_handle, self._handle)
+                if indicate:
+                    # Indicate connected centrals.
+                    self._ble.gatts_indicate(conn_handle, self._handle)
+
+    def _advertise(self, interval_us=500000):
+        self._ble.gap_advertise(interval_us, adv_data=self._payload)
+
+    # ref https://github.com/raspberrypi/pico-micropython-examples/blob/master/adc/temperature.py
+    def get_temp(self):
+        sensor.measure()
+        return sensor.temperature(), sensor.humidity()
 
 
-def send_data_through_broadcast(message):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    sock.bind(("", 0))
-
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-    broadcast_address = "192.168.1.255"
-    port = 12345
-
-    sock.sendto(message.encode(), (broadcast_address, port))
-
-    sock.close()
+def demo():
+    ble = bluetooth.BLE()
+    temp = BLETemperature(ble)
+    led = Pin('LED', Pin.OUT)
+    while True:
+        led.toggle()
+        time.sleep_ms(1000)
+        temp.update_temperature(notify=True, indicate=False)
+        led.toggle()
+        time.sleep_ms(1000 * 59)
 
 
-def ConnectWiFi():
-    ssid = env_file.ssid
-    password = env_file.password
-    # Initialize the WiFi interface
-    wlan = network.WLAN(network.STA_IF)
-    # led.on()
-    # time.sleep(0.5)
-    # led.off()
+# def encrypt_msg(message):
+#     with open("public_key.pem", "rb") as public_file:
+#         public_key = serialization.load_pem_public_key(
+#             public_file.read(), backend=default_backend())
+#     encrypted = public_key.encrypt(
+#                      label=None))
+#
+#     return encrypted
 
-    mac_adrr = ubinascii.hexlify(wlan.config("mac")).decode()
-    s = machine.unique_id()
-
-    unique_id = ""
-    for b in s:
-        unique_id += str(int(hex(b)[2:], 16))
-
-    log("chip_id: " + unique_id)
-    password = dec(password, int(unique_id))
-
-    # Activate the WiFi interface
-    wlan.active(True)
-    # Attempt to connect to the WiFi network
-    wlan.connect(ssid, password)
-    time.sleep(1)
-
-    i = 0
-    start_time = time.time()
-    while wlan.isconnected() == False and i < 30:
-        # Get the current time in seconds since the epoch
-        print('Waiting for connection...')
-        log('Waiting for connection...')
-        time.sleep(1)
-        i = i + 1
-
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    log("time_elapsed: " + str(elapsed_time))
-
-    if wlan.isconnected() == False:
-        return "0"
-
-    log('Connection success;')
-    # Print the IP address and other network details
-    # led.on()
-    # time.sleep(0.5)
-    # led.off()
-    print(wlan.ifconfig())
-    log(str(wlan.ifconfig()))
-    return unique_id
-
-
-def dec(encrypted_text, shift):
-    decmsg = ""
-    for char in encrypted_text:
-        if char.isalpha() or char.isdigit():
-            ascii_offset = ord('a') if char.islower() else ord('A')
-            if char.isdigit():
-                decrypted_digit = str((int(char) - shift) % 10)
-            else:
-                decrypted_char = chr((ord(char) - ascii_offset - shift) % 26 +
-                                     ascii_offset)
-            decmsg += decrypted_digit if char.isdigit() else decrypted_char
-        else:
-            decmsg += char
-
-    return decmsg
-
-
-def main():
-    unique_id = ConnectWiFi()
-    if unique_id == "0":
-        log("uid == '0'")
-        return
-
-    log("start messure")
-    sensor.measure()
-    log("messuring ...")
-    temp = sensor.temperature()
-    log("messuring ...")
-    hum = sensor.humidity()
-    log('messured')
-    print('Temperature: %3.1f C' % temp)
-    print('Humidity: %3.1f %%' % hum)
-
-    message = {
-        "temp": temp,
-        "hum": hum,
-        "name": env_file.name,
-        "unique_id": str(unique_id)
-    }
-    log(json.dumps(message))
-    send_data_through_broadcast(json.dumps(message))
-
-
-log("start up")
-
-while True:
-    main()
-    lightsleep(1000 * 60 * 60)
+if __name__ == "__main__":
+    demo()
