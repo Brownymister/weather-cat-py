@@ -38,6 +38,12 @@ _ADV_APPEARANCE_GENERIC_THERMOMETER = const(768)
 sensor = dht.DHT22(Pin(22))
 
 
+def log(text):
+    with open('log.txt', 'a') as file:
+        # Write the string to the file
+        file.write(text + "\n")
+
+
 class BLETemperature:
 
     def __init__(self, ble, name="WeatherCat"):
@@ -70,7 +76,7 @@ class BLETemperature:
         elif event == _IRQ_GATTS_INDICATE_DONE:
             conn_handle, value_handle, status = data
 
-    def update_temperature(self, notify=False, indicate=False):
+    def send_temperature(self, notify=False, indicate=False):
         # Write the local value, ready for a central to read.
         temp_deg_c, hum = self.get_temp()
         print("write temp %.2f degc" % temp_deg_c)
@@ -98,26 +104,17 @@ class BLETemperature:
         return sensor.temperature(), sensor.humidity()
 
 
-def demo():
+def main():
     ble = bluetooth.BLE()
     temp = BLETemperature(ble)
     led = Pin('LED', Pin.OUT)
     while True:
         led.toggle()
         time.sleep_ms(1000)
-        temp.update_temperature(notify=True, indicate=False)
+        temp.send_temperature(notify=True, indicate=False)
         led.toggle()
-        time.sleep_ms(1000 * 59)
+        machine.lightsleep(1000 * 60 * 60)
 
-
-# def encrypt_msg(message):
-#     with open("public_key.pem", "rb") as public_file:
-#         public_key = serialization.load_pem_public_key(
-#             public_file.read(), backend=default_backend())
-#     encrypted = public_key.encrypt(
-#                      label=None))
-#
-#     return encrypted
 
 if __name__ == "__main__":
-    demo()
+    main()
